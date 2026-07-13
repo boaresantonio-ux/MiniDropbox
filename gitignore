@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+
+instance/
+nodes/*
+!nodes/.gitkeep
+temp/*
+!temp/.gitkeep
+
+static/uploads/profiles/*
+!static/uploads/profiles/default.webp

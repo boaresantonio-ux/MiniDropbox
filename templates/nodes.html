@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Dropbox Distribuído - Nós</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .sidebar {
+            background-color: #ffffff;
+            min-height: 100vh;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+        }
+
+        .nav-link.active {
+            background-color: #0d6efd;
+            color: white !important;
+            border-radius: 5px;
+        }
+
+        #map {
+            height: 420px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            z-index: 1;
+        }
+
+        .no-item.disabled {
+            opacity: .6;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container-fluid">
+        <div class="row">
+
+            <div class="col-md-3 col-lg-2 sidebar p-3 d-flex flex-column">
+
+                <h4 class="text-primary mb-4">
+                    <i class="fa-solid fa-cloud-arrow-up me-2"></i>
+                    Mini Dropbox
+                </h4>
+
+                <hr>
+
+                <h6 class="text-muted text-uppercase small">Navegação</h6>
+
+                <ul class="nav flex-column mb-4">
+                    <li class="nav-item mb-1">
+                        <a class="nav-link text-dark" href="{{ url_for('dashboard') }}">
+                            <i class="fa-solid fa-house me-2"></i> Arquivos
+                        </a>
+                    </li>
+                    <li class="nav-item mb-1">
+                        <a class="nav-link active" href="{{ url_for('nodes') }}">
+                            <i class="fa-solid fa-server me-2"></i> Nós
+                        </a>
+                    </li>
+                    <li class="nav-item mb-1">
+                        <a class="nav-link text-dark" href="{{ url_for('profile') }}">
+                            <i class="fa-solid fa-user me-2"></i> Perfil
+                        </a>
+                    </li>
+                </ul>
+
+                <div class="mt-auto">
+                    <a href="{{ url_for('logout') }}" class="btn btn-outline-danger w-100">
+                        <i class="fa-solid fa-right-from-bracket me-1"></i> Sair
+                    </a>
+                </div>
+            </div>
+
+            <div class="col-md-9 col-lg-10 p-4">
+
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h2>Nós do sistema distribuído</h2>
+                        <p class="text-muted mb-0">Localização geográfica, estado e réplicas de cada servidor.</p>
+                    </div>
+                </div>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+                {% endif %}
+                {% endwith %}
+
+                <div class="row">
+                    <div class="col-lg-8">
+                        <div class="card p-3 shadow-sm mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h5 class="mb-0">
+                                    <i class="fa-solid fa-earth-africa text-success me-2"></i>
+                                    Mapa dos nós
+                                </h5>
+                                <small class="text-muted">clica no mapa para testar a consulta espacial (R-tree)</small>
+                            </div>
+                            <div id="map" data-nodes='{{ nodes_json | tojson | safe }}'></div>
+                            <div id="consulta-resultado" class="small text-muted mt-2"></div>
+                        </div>
+
+                        <div class="card p-3 shadow-sm mb-4">
+                            <h5 class="mb-3"><i class="fa-solid fa-list me-2 text-primary"></i>Nós cadastrados</h5>
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Nó</th>
+                                            <th>Coordenadas</th>
+                                            <th>UTM</th>
+                                            <th>Réplicas</th>
+                                            <th class="text-end">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for n in nodes_json %}
+                                        <tr class="no-item {{ '' if n.enabled else 'disabled' }}">
+                                            <td>
+                                                {% if n.enabled %}
+                                                <span class="badge bg-success">●</span>
+                                                {% else %}
+                                                <span class="badge bg-danger">●</span>
+                                                {% endif %}
+                                                <strong>{{ n.name }}</strong>
+                                                {% if n.is_backup %}
+                                                <span class="badge bg-warning text-dark ms-1">backup fixo</span>
+                                                {% endif %}
+                                                <div class="small text-muted">{{ n.host }}:{{ n.port }}</div>
+                                            </td>
+                                            <td class="small text-muted">{{ "%.4f"|format(n.latitude) }}, {{ "%.4f"|format(n.longitude) }}</td>
+                                            <td class="small text-muted">
+                                                {% if n.utm %}{{ n.utm.zona }}<br>{{ n.utm.easting }}E / {{ n.utm.northing }}N{% else %}—{% endif %}
+                                            </td>
+                                            <td>{{ n.replicas }}</td>
+                                            <td class="text-end">
+                                                {% if not n.is_backup %}
+                                                <div class="btn-group btn-group-sm">
+                                                    <form action="{{ url_for('toggle_node', node_id=n.id) }}" method="POST" class="d-inline">
+                                                        <button type="submit" class="btn btn-outline-secondary" title="{{ 'Derrubar' if n.enabled else 'Reativar' }}">
+                                                            <i class="fa-solid {{ 'fa-power-off' if n.enabled else 'fa-play' }}"></i>
+                                                        </button>
+                                                    </form>
+                                                    <a href="{{ url_for('confirmar_delete_node', node_id=n.id) }}" class="btn btn-outline-danger" title="Remover">
+                                                        <i class="fa-solid fa-trash"></i>
+                                                    </a>
+                                                </div>
+                                                {% else %}
+                                                <span class="badge bg-light text-muted border">protegido</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-4">
+                        <div class="card p-3 shadow-sm mb-4">
+                            <h5><i class="fa-solid fa-server text-primary me-2"></i>Criar novo nó</h5>
+                            <p class="small text-muted">Latitude e longitude são obrigatórias — é isso que faz o nó
+                                aparecer no mapa e entrar na consulta espacial (R-tree).</p>
+                            <form method="POST" action="{{ url_for('add_node') }}" id="add-node-form">
+                                <div class="mb-2">
+                                    <label class="form-label small">Nome</label>
+                                    <input type="text" name="name" class="form-control form-control-sm" required>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small">Latitude</label>
+                                    <input type="text" name="latitude" id="input-lat" class="form-control form-control-sm" required>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small">Longitude</label>
+                                    <input type="text" name="longitude" id="input-lon" class="form-control form-control-sm" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small">Host / Porta (opcional)</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" name="host" class="form-control" placeholder="127.0.0.1">
+                                        <input type="text" name="port" class="form-control" placeholder="5000">
+                                    </div>
+                                </div>
+                                <button type="button" id="btn-modo-criar" class="btn btn-outline-secondary btn-sm w-100 mb-2">
+                                    <i class="fa-solid fa-map-pin me-1"></i> Ativar modo "clicar no mapa"
+                                </button>
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="fa-solid fa-plus me-1"></i> Criar nó
+                                </button>
+                            </form>
+                        </div>
+
+                        <div class="card p-3 shadow-sm bg-light border-0">
+                            <h6 class="small mb-2"><i class="fa-solid fa-circle-info me-2 text-info"></i>Legenda</h6>
+                            <div class="small text-muted mb-1"><span class="badge bg-success">●</span> nó ativo</div>
+                            <div class="small text-muted mb-1"><span class="badge bg-danger">●</span> nó inativo</div>
+                            <div class="small text-muted"><span class="badge bg-warning text-dark">backup fixo</span> não pode ser desativado nem removido</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <script>
+        const mapElement = document.getElementById("map");
+        const nodesData = JSON.parse(mapElement.dataset.nodes);
+
+        const map = L.map('map').setView([-11.2027, 17.8739], 6);
+
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+        function corDoNo(n) {
+            if (n.is_backup) return "#ffc107";
+            return n.enabled ? "#198754" : "#dc3545";
+        }
+
+        const markers = [];
+        nodesData.forEach(n => {
+            const status = n.enabled ? "🟢 Ativo" : "🔴 Desativado";
+            const marker = L.circleMarker([n.latitude, n.longitude], {
+                radius: 9, color: corDoNo(n), fillColor: corDoNo(n), fillOpacity: 0.8
+            }).addTo(map);
+            marker.bindPopup(`
+                <b>${n.name}</b>${n.is_backup ? " (backup fixo)" : ""}<br>
+                Estado: ${status}<br>
+                ${n.host}:${n.port}
+            `);
+            markers.push(marker);
+        });
+        if (nodesData.length) {
+            map.fitBounds(L.latLngBounds(nodesData.map(n => [n.latitude, n.longitude])), { padding: [30, 30] });
+        }
+
+        // ---------- modo "clicar no mapa para criar nó" ----------
+        let modoCriar = false;
+        const btnModo = document.getElementById('btn-modo-criar');
+        btnModo.addEventListener('click', () => {
+            modoCriar = !modoCriar;
+            btnModo.classList.toggle('btn-warning', modoCriar);
+            btnModo.classList.toggle('btn-outline-secondary', !modoCriar);
+            btnModo.innerHTML = modoCriar
+                ? '<i class="fa-solid fa-map-pin me-1"></i> Modo ativo — clica no mapa'
+                : '<i class="fa-solid fa-map-pin me-1"></i> Ativar modo "clicar no mapa"';
+        });
+
+        let marcadorTemp = null;
+        let linhaConsulta = null;
+
+        map.on('click', async (e) => {
+            const { lat, lng } = e.latlng;
+
+            if (modoCriar) {
+                document.getElementById('input-lat').value = lat.toFixed(4);
+                document.getElementById('input-lon').value = lng.toFixed(4);
+                if (marcadorTemp) map.removeLayer(marcadorTemp);
+                marcadorTemp = L.marker([lat, lng]).addTo(map).bindPopup('Novo nó (posição escolhida)').openPopup();
+                return;
+            }
+
+            const resp = await fetch(`/api/nos/proximo?lat=${lat}&lon=${lng}`);
+            const resultado = document.getElementById('consulta-resultado');
+            if (!resp.ok) {
+                resultado.textContent = 'nenhum nó ativo disponível para a consulta';
+                return;
+            }
+            const data = await resp.json();
+            resultado.innerHTML = `<i class="fa-solid fa-magnifying-glass-location me-1"></i>
+                consulta R-tree: nó mais próximo de (${lat.toFixed(3)}, ${lng.toFixed(3)}) é
+                <strong class="text-primary">${data.name}</strong> — ${data.distancia_km} km`;
+
+            if (linhaConsulta) map.removeLayer(linhaConsulta);
+            linhaConsulta = L.polyline([[lat, lng], [data.latitude, data.longitude]], { color: '#0d6efd', dashArray: '4 4' }).addTo(map);
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Dropbox Distribuído - Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .sidebar {
+            background-color: #ffffff;
+            min-height: 100vh;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+        }
+
+        .nav-link.active {
+            background-color: #0d6efd;
+            color: white !important;
+            border-radius: 5px;
+        }
+
+        #map {
+            height: 320px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            z-index: 1;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container-fluid">
+        <div class="row">
+
+    <div class="col-md-3 col-lg-2 sidebar p-3 d-flex flex-column">
+
+        <h4 class="text-primary mb-4">
+            <i class="fa-solid fa-cloud-arrow-up me-2"></i>
+            Mini Dropbox
+        </h4>
+
+        <hr>
+
+
+        <h6 class="text-muted text-uppercase small">
+            Navegação
+        </h6>
+
+
+        <ul class="nav flex-column mb-4">
+
+
+            <li class="nav-item mb-1">
+
+                <a class="nav-link 
+                {% if not current_folder %}active{% else %}text-dark{% endif %}"
+                href="{{ url_for('dashboard') }}">
+
+                    <i class="fa-solid fa-house me-2"></i>
+                    Raiz (/)
+
+                </a>
+
+            </li>
+
+
+
+            {% for fld in folders %}
+
+            <li class="nav-item mb-1">
+
+                <a class="nav-link 
+                {% if current_folder == fld.id %}active{% else %}text-dark{% endif %}"
+
+                href="{{ url_for(
+                    'dashboard',
+                    folder=fld.id
+                ) }}">
+
+                    <i class="fa-solid fa-folder me-2 text-warning"></i>
+
+                    {{ fld.name }}
+
+                </a>
+
+            </li>
+
+            {% endfor %}
+
+
+        </ul>
+
+
+
+        <!-- Nós ativos -->
+
+        <div class="card border-0 bg-light mb-3 p-3">
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="small mb-0">
+                    <i class="fa-solid fa-server me-2"></i>
+                    Nós ativos
+                </h6>
+                <a href="{{ url_for('nodes') }}" class="small">
+                    Gerir <i class="fa-solid fa-arrow-right ms-1"></i>
+                </a>
+            </div>
+
+
+            {% for node in nodes %}
+
+                <div class="d-flex justify-content-between small mb-1">
+
+                    <span>
+                        {{ node.name }}
+                        {% if node.is_backup %}<span class="badge bg-warning text-dark">backup</span>{% endif %}
+                    </span>
+
+
+                    {% if node.enabled %}
+
+                    <span class="badge bg-success">
+                        Online
+                    </span>
+
+                    {% else %}
+
+                    <span class="badge bg-danger">
+                        Offline
+                    </span>
+
+                    {% endif %}
+
+
+                </div>
+
+            {% endfor %}
+
+        </div>
+
+
+
+        <!-- Armazenamento -->
+
+        <div class="mt-auto bg-light p-3 rounded text-center">
+
+
+            <h6 class="small mb-1">
+                Espaço Utilizado
+            </h6>
+
+
+            <div class="progress mb-2"
+                 style="height:12px;">
+
+
+                <div id="storage-bar"
+
+                     class="progress-bar bg-success"
+
+                     role="progressbar"
+
+                     data-percentage="{{ progress_percent }}">
+
+                </div>
+
+
+            </div>
+
+
+            <small class="text-muted">
+
+                {{ total_mb }} MB
+
+            </small>
+
+
+        </div>
+
+    </div>
+
+            <div class="col-md-9 col-lg-10 p-4">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h2>Olá, <span class="text-primary">{{ current_user.username }}</span>!</h2>
+                        <p class="text-muted">A navegar na pasta: <code>{{ current_folder_nome }}</code></p>
+                    </div>
+                    <div>
+                        <a href="{{ url_for('nodes') }}" class="btn btn-outline-secondary me-2">
+                            <i class="fa-solid fa-server me-1"></i>Nós
+                        </a>
+                        <a href="{{ url_for('lixeira') }}" class="btn btn-outline-secondary me-2">
+                            <i class="fa-solid fa-trash-can-arrow-up me-1"></i>Lixeira
+                            {% if total_lixeira %}<span class="badge bg-danger ms-1">{{ total_lixeira }}</span>{% endif %}
+                        </a>
+                        <a href="{{ url_for('profile') }}" class="btn me-2"><img id="preview" src="{{ url_for('static',
+             filename='uploads/profiles/' + current_user.profile_image) }}" class="rounded-circle border" width="30"
+                                height="30" style="object-fit:cover;"> Perfil</a>
+                        <a href="{{ url_for('logout') }}" class="btn btn-danger"><i
+                                class="fa-solid fa-right-from-bracket me-1"></i>Sair</a>
+                    </div>
+                </div>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+                {% endif %}
+                {% endwith %}
+
+                <div class="row g-3 mb-4">
+                    <div class="col-lg-4">
+                        <div class="card p-3 shadow-sm h-100">
+                            <h5><i class="fa-solid fa-file-upload text-primary me-2"></i>Carregar Ficheiro</h5>
+                            <form action="{{ url_for('upload_file') }}" method="POST" enctype="multipart/form-data">
+                                <input type="hidden" name="folder" value="{{ current_folder }}">
+                                <div class="input-group mt-2">
+                                    <input type="file" name="file" class="form-control" multiple required>
+                                    <button type="submit" class="btn btn-primary">Enviar</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-4">
+                        <div class="card p-3 shadow-sm h-100">
+                            <h5><i class="fa-solid fa-folder-plus text-warning me-2"></i>Criar Nova Pasta</h5>
+                            <form action="{{ url_for('create_folder') }}" method="POST">
+                                <input type="hidden" name="parent_id" value="{{ current_folder }}">
+                                <div class="input-group mt-2">
+                                    <input type="text" name="folder_name" class="form-control"
+                                        placeholder="Ex: Engenharia" required>
+                                    <button type="submit" class="btn btn-warning text-white">Criar</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-4">
+                        <div class="card p-3 shadow-sm h-100">
+                            <h5><i class="fa-solid fa-magnifying-glass text-info me-2"></i>Filtrar Itens</h5>
+                            <form action="{{ url_for('dashboard') }}" method="GET">
+                                <input type="hidden" name="folder" value="{{ current_folder }}">
+                                <div class="input-group mt-2">
+                                    <input type="text" name="search" class="form-control"
+                                        placeholder="Nome do ficheiro..." value="{{ search_query }}">
+                                    <button type="submit" class="btn btn-info text-white">Procurar</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-lg-8">
+                        <div class="card p-3 shadow-sm mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0">Arquivos Locais</h5>
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                                        data-bs-toggle="dropdown">
+                                        Ordenar os dados
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item"
+                                                href="?folder={{ current_folder }}&sort=date_desc">Mais Recentes</a>
+                                        </li>
+                                        <li><a class="dropdown-item"
+                                                href="?folder={{ current_folder }}&sort=name_asc">Nome (A-Z)</a></li>
+                                        <li><a class="dropdown-item"
+                                                href="?folder={{ current_folder }}&sort=size_desc">Tamanho (Maior)</a>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            {% if not files %}
+                            <div class="text-center py-5 text-muted">
+                                <i class="fa-regular fa-folder-open fa-3x mb-3"></i>
+                                <p>Esta pasta está vazia ou a vossa pesquisa não retornou correspondências.</p>
+                            </div>
+                            {% else %}
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Nome do Ficheiro</th>
+                                            <th>Tamanho</th>
+                                            <th>Data de Criação</th>
+                                            <th>Servido por</th>
+                                            <th class="text-end">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for file in files %}
+                                        {% if file.filename != "FOLDER_MARKER" %}
+                                        <tr>
+                                            <td>
+                                                <i class="fa-regular fa-file-lines fa-lg text-secondary me-2"></i>
+                                                <strong>{{ file.display_name }}</strong>
+                                            </td>
+                                            <td>{{ (file.file_size / 1024) | round(2) }} KB</td>
+                                            <td class="small text-muted">{{ file.upload_date.strftime('%d/%m/%Y %H:%M')
+                                                }}</td>
+                                            <td>
+                                                <span class="badge bg-secondary no-servidor-badge" data-file-id="{{ file.id }}">
+                                                    <i class="fa-solid fa-spinner fa-spin"></i>
+                                                </span>
+                                            </td>
+                                            <td class="text-end">
+                                                <div class="btn-group btn-group-sm">
+                                                    <a href="{{ url_for('download_file', file_id=file.id) }}"
+                                                        class="btn btn-outline-primary link-download" data-file-id="{{ file.id }}"
+                                                        title="Descarregar"><i
+                                                            class="fa-solid fa-download"></i></a>
+                                                    <a href="{{ url_for('preview_file', file_id=file.id) }}"
+                                                        target="_blank" class="btn btn-outline-info text-white link-preview" data-file-id="{{ file.id }}"
+                                                        title="Visualizar"><i class="fa-solid fa-eye text-info"></i></a>
+                                                    <form action="{{ url_for('delete_file', file_id=file.id) }}"
+                                                        method="POST" class="d-inline"
+                                                        onsubmit="return confirm('Deseja mesmo remover este item?');">
+                                                        <button type="submit" class="btn btn-outline-danger"
+                                                            title="Eliminar"><i class="fa-solid fa-trash"></i></button>
+                                                    </form>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endif %}
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="col-lg-4">
+                        <div class="card p-3 shadow-sm mb-4">
+                            <h5><i class="fa-solid fa-earth-africa text-success me-2"></i>Infraestrutura Espacial</h5>
+                            <p class="small text-muted mb-2">Visão geral dos nós distribuídos ativos mapeados via
+                                PostGIS:</p>
+
+                            <div id="map" data-nodes='{{ nodes_json | tojson | safe }}' class="mb-3"></div>
+
+                            <div class="bg-light p-2 rounded small">
+                                {% for node in nodes %}
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span>
+                                        <i class="fa-solid fa-server {{ 'text-primary' if node.is_backup else 'text-secondary' }} me-1"></i>
+                                        Nó {{ node.name }}{% if node.is_backup %} (Backup){% endif %}:
+                                    </span>
+                                    <span class="badge {{ 'bg-success' if node.enabled else 'bg-danger' }}">
+                                        {{ 'Sincronizado' if node.enabled else 'Offline' }}
+                                    </span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+
+document.addEventListener("DOMContentLoaded", () => {
+    const barra = document.getElementById("storage-bar");
+    if (barra) {
+        const pct = barra.dataset.percentage || 0;
+        barra.style.width = pct + "%";
+        barra.setAttribute("aria-valuenow", pct);
+    }
+});
+
+const mapElement = document.getElementById("map");
+
+const nodes = JSON.parse(
+    mapElement.dataset.nodes
+);
+
+
+const map = L.map('map').setView(
+    [-11.2027, 17.8739],
+    6
+);
+
+
+L.tileLayer(
+    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {
+        maxZoom: 19
+    }
+).addTo(map);
+
+
+
+nodes.forEach(node => {
+
+
+    let status = node.enabled
+        ? "🟢 Ativo"
+        : "🔴 Desativado";
+
+
+    L.marker([
+        node.latitude,
+        node.longitude
+    ])
+    .addTo(map)
+    .bindPopup(`
+        <b>${node.name}</b><br>
+        Estado: ${status}<br>
+        ${node.host}:${node.port}
+    `);
+
+
+});
+
+
+// ---------------------------------------------------------------
+// Nó mais próximo por arquivo: pede a localização do navegador (com
+// fallback para Luanda se o usuário recusar ou o browser não suportar),
+// e usa essa coordenada tanto para mostrar o selo "Servido por" quanto
+// para os links de download/visualização — assim o arquivo é servido
+// pelo nó ativo mais próximo que realmente o tem, com o backup como
+// último recurso.
+// ---------------------------------------------------------------
+
+const LOCALIZACAO_PADRAO = { lat: -8.8383, lon: 13.2343 }; // Luanda
+
+function obterLocalizacaoCliente() {
+    return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+            resolve(LOCALIZACAO_PADRAO);
+            return;
+        }
+        const temporizador = setTimeout(() => resolve(LOCALIZACAO_PADRAO), 3000);
+        navigator.geolocation.getCurrentPosition(
+            (posicao) => {
+                clearTimeout(temporizador);
+                resolve({ lat: posicao.coords.latitude, lon: posicao.coords.longitude });
+            },
+            () => {
+                clearTimeout(temporizador);
+                resolve(LOCALIZACAO_PADRAO);
+            },
+            { timeout: 3000 }
+        );
+    });
+}
+
+async function preencherNoServidor(lat, lon) {
+    const badges = document.querySelectorAll('.no-servidor-badge');
+
+    for (const badge of badges) {
+        const fileId = badge.dataset.fileId;
+
+        // links de download/visualização passam a usar a mesma coordenada,
+        // para que o arquivo baixado seja servido pelo mesmo nó mostrado no selo
+        const linkDownload = document.querySelector(`.link-download[data-file-id="${fileId}"]`);
+        const linkPreview = document.querySelector(`.link-preview[data-file-id="${fileId}"]`);
+        [linkDownload, linkPreview].forEach(link => {
+            if (link) {
+                const url = new URL(link.href, window.location.origin);
+                url.searchParams.set('lat', lat);
+                url.searchParams.set('lon', lon);
+                link.href = url.toString();
+            }
+        });
+
+        try {
+            const resp = await fetch(`/api/arquivos/${fileId}/no-servidor?lat=${lat}&lon=${lon}`);
+            if (!resp.ok) {
+                badge.className = 'badge bg-danger';
+                badge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> indisponível';
+                continue;
+            }
+            const dados = await resp.json();
+            const distancia = dados.distancia_km !== null ? ` · ${dados.distancia_km} km` : '';
+
+            if (dados.is_backup) {
+                badge.className = 'badge bg-warning text-dark';
+                badge.innerHTML = `<i class="fa-solid fa-database"></i> ${dados.node} (backup)${distancia}`;
+            } else {
+                badge.className = 'badge bg-success';
+                badge.innerHTML = `<i class="fa-solid fa-server"></i> ${dados.node}${distancia}`;
+            }
+        } catch (e) {
+            badge.className = 'badge bg-secondary';
+            badge.innerHTML = '<i class="fa-solid fa-question"></i> erro';
+        }
+    }
+}
+
+obterLocalizacaoCliente().then(({ lat, lon }) => preencherNoServidor(lat, lon));
+
+</script>
+</body>
+
+</html>
