@@ -2,6 +2,7 @@ import os
 import re
 import shutil
 import uuid
+from sqlalchemy.engine import URL
 from datetime import datetime
 
 from flask import (
@@ -41,8 +42,16 @@ os.makedirs(NODES_ROOT, exist_ok=True)
 os.makedirs(TEMP_FOLDER, exist_ok=True)
 os.makedirs(PROFILE_FOLDER, exist_ok=True)
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(app.instance_path, "database.db")
 
+
+app.config["SQLALCHEMY_DATABASE_URI"] = URL.create(
+    "postgresql+psycopg2",
+    username="dropbox_user",
+    password="123@b",
+    host="localhost",
+    port=5432,
+    database="dropbox_mini",
+)
 db.init_app(app)
 login_manager.init_app(app)
 
@@ -745,6 +754,83 @@ def delete_node(node_id):
         "success",
     )
     return redirect(url_for("nodes"))
+
+
+@app.route("/nodes/<node_id>/files")
+@login_required
+def node_files(node_id):
+    """Lista os arquivos (réplicas) fisicamente guardados num nó específico."""
+    node = Node.query.get_or_404(node_id)
+
+    replicas = (
+        FileReplica.query.filter_by(node_id=node_id)
+        .order_by(FileReplica.replicated_at.desc())
+        .all()
+    )
+
+    itens = []
+    for replica in replicas:
+        arquivo = replica.file
+        if arquivo is None:
+            # réplica órfã (arquivo já não existe na base) — ainda mostramos
+            # para permitir limpar a linha/o ficheiro físico do nó.
+            continue
+
+        caminho = caminho_replica(node, arquivo.user_id, arquivo.filename)
+        itens.append({
+            "replica": replica,
+            "arquivo": arquivo,
+            "existe_no_disco": os.path.exists(caminho),
+            "dono": arquivo.owner.username if arquivo.owner else "—",
+        })
+
+    return render_template("node_files.html", node=node, itens=itens)
+
+
+@app.route("/nodes/<node_id>/files/<file_id>/delete", methods=["POST"])
+@login_required
+def delete_node_file(node_id, file_id):
+    """
+    Apaga a réplica de um arquivo num nó específico: remove o ficheiro
+    físico da pasta do nó e a linha correspondente em `file_replicas`.
+
+    Isto é diferente de apagar o arquivo do usuário (rota /delete): aqui
+    mexemos só na cópia guardada NESTE nó, sem tocar nas réplicas dos
+    outros nós nem no registo do arquivo em si.
+    """
+    node = Node.query.get_or_404(node_id)
+    arquivo = File.query.get_or_404(file_id)
+    replica = FileReplica.query.filter_by(node_id=node_id, file_id=file_id).first_or_404()
+
+    outras_replicas_stored = FileReplica.query.filter(
+        FileReplica.file_id == file_id,
+        FileReplica.node_id != node_id,
+        FileReplica.status == "STORED",
+    ).count()
+
+    caminho = caminho_replica(node, arquivo.user_id, arquivo.filename)
+    if os.path.exists(caminho):
+        os.remove(caminho)
+
+    db.session.delete(replica)
+    db.session.add(Operation(
+        operation="REMOVER_REPLICA_NO",
+        file_id=file_id,
+        node_id=node_id,
+        detail=f'Réplica de "{arquivo.display_name}" removida manualmente do nó {node.name}',
+    ))
+    db.session.commit()
+
+    if outras_replicas_stored == 0:
+        flash(
+            f'Réplica removida do nó "{node.name}". Atenção: era a última réplica íntegra '
+            f'de "{arquivo.display_name}" — o arquivo ficou sem cópia disponível em nenhum nó.',
+            "warning",
+        )
+    else:
+        flash(f'Réplica de "{arquivo.display_name}" removida do nó "{node.name}".', "success")
+
+    return redirect(url_for("node_files", node_id=node_id))
 
 
 # -----------------------------------------------------------------------------

@@ -148,8 +148,11 @@
                                             </td>
                                             <td>{{ n.replicas }}</td>
                                             <td class="text-end">
-                                                {% if not n.is_backup %}
                                                 <div class="btn-group btn-group-sm">
+                                                    <a href="{{ url_for('node_files', node_id=n.id) }}" class="btn btn-outline-primary" title="Ver ficheiros deste nó">
+                                                        <i class="fa-solid fa-folder-open"></i>
+                                                    </a>
+                                                    {% if not n.is_backup %}
                                                     <form action="{{ url_for('toggle_node', node_id=n.id) }}" method="POST" class="d-inline">
                                                         <button type="submit" class="btn btn-outline-secondary" title="{{ 'Derrubar' if n.enabled else 'Reativar' }}">
                                                             <i class="fa-solid {{ 'fa-power-off' if n.enabled else 'fa-play' }}"></i>
@@ -158,9 +161,10 @@
                                                     <a href="{{ url_for('confirmar_delete_node', node_id=n.id) }}" class="btn btn-outline-danger" title="Remover">
                                                         <i class="fa-solid fa-trash"></i>
                                                     </a>
+                                                    {% endif %}
                                                 </div>
-                                                {% else %}
-                                                <span class="badge bg-light text-muted border">protegido</span>
+                                                {% if n.is_backup %}
+                                                <div><span class="badge bg-light text-muted border mt-1">protegido</span></div>
                                                 {% endif %}
                                             </td>
                                         </tr>

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Dropbox Distribuído - Ficheiros do nó</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .sidebar { background-color: #ffffff; min-height: 100vh; box-shadow: 2px 0 5px rgba(0,0,0,.05); }
+        .nav-link.active { background-color: #0d6efd; color: white !important; border-radius: 5px; }
+    </style>
+</head>
+
+<body>
+    <div class="container-fluid">
+        <div class="row">
+
+            <div class="col-md-3 col-lg-2 sidebar p-3 d-flex flex-column">
+                <h4 class="text-primary mb-4">
+                    <i class="fa-solid fa-cloud-arrow-up me-2"></i> Mini Dropbox
+                </h4>
+                <hr>
+                <ul class="nav flex-column mb-4">
+                    <li class="nav-item mb-1">
+                        <a class="nav-link text-dark" href="{{ url_for('dashboard') }}">
+                            <i class="fa-solid fa-house me-2"></i> Arquivos
+                        </a>
+                    </li>
+                    <li class="nav-item mb-1">
+                        <a class="nav-link active" href="{{ url_for('nodes') }}">
+                            <i class="fa-solid fa-server me-2"></i> Nós
+                        </a>
+                    </li>
+                    <li class="nav-item mb-1">
+                        <a class="nav-link text-dark" href="{{ url_for('lixeira') }}">
+                            <i class="fa-solid fa-trash-can-arrow-up me-2"></i> Lixeira
+                        </a>
+                    </li>
+                </ul>
+                <div class="mt-auto">
+                    <a href="{{ url_for('logout') }}" class="btn btn-outline-danger w-100">
+                        <i class="fa-solid fa-right-from-bracket me-1"></i> Sair
+                    </a>
+                </div>
+            </div>
+
+            <div class="col-md-9 col-lg-10 p-4">
+
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h2>
+                            <i class="fa-solid fa-folder-open text-primary me-2"></i>
+                            Ficheiros em "{{ node.name }}"
+                            {% if node.is_backup %}
+                            <span class="badge bg-warning text-dark align-middle">backup fixo</span>
+                            {% endif %}
+                        </h2>
+                        <p class="text-muted mb-0">
+                            {{ node.host }}:{{ node.port }} ·
+                            {% if node.enabled %}
+                            <span class="text-success"><i class="fa-solid fa-circle-check me-1"></i>ativo</span>
+                            {% else %}
+                            <span class="text-danger"><i class="fa-solid fa-circle-xmark me-1"></i>desativado</span>
+                            {% endif %}
+                            · pasta física: <code class="small">{{ node.path }}</code>
+                        </p>
+                    </div>
+                    <a href="{{ url_for('nodes') }}" class="btn btn-outline-secondary">
+                        <i class="fa-solid fa-arrow-left me-1"></i> Voltar aos nós
+                    </a>
+                </div>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+                {% endif %}
+                {% endwith %}
+
+                {% if node.is_backup %}
+                <div class="alert alert-warning small">
+                    <i class="fa-solid fa-triangle-exclamation me-1"></i>
+                    Este é o nó de backup fixo: apagar uma réplica aqui pode impedir a
+                    restauração de um arquivo que esteja na lixeira do usuário.
+                </div>
+                {% endif %}
+
+                <div class="card p-3 shadow-sm">
+                    {% if not itens %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="fa-regular fa-folder-open fa-3x mb-3"></i>
+                        <p>Este nó não guarda nenhum ficheiro no momento.</p>
+                    </div>
+                    {% else %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Ficheiro</th>
+                                    <th>Dono</th>
+                                    <th>Tamanho</th>
+                                    <th>Estado da réplica</th>
+                                    <th>Replicado em</th>
+                                    <th class="text-end">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in itens %}
+                                {% set arquivo = item.arquivo %}
+                                {% set replica = item.replica %}
+                                <tr>
+                                    <td>
+                                        <i class="fa-regular fa-file-lines text-secondary me-2"></i>
+                                        <strong>{{ arquivo.display_name }}</strong>
+                                        {% if arquivo.deleted_at %}
+                                        <span class="badge bg-secondary ms-1" title="Arquivo na lixeira do usuário">na lixeira</span>
+                                        {% endif %}
+                                        {% if not item.existe_no_disco %}
+                                        <div class="small text-danger">
+                                            <i class="fa-solid fa-triangle-exclamation me-1"></i>ficheiro físico em falta no disco
+                                        </div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="small text-muted">{{ item.dono }}</td>
+                                    <td>{{ arquivo.size | fmt_bytes }}</td>
+                                    <td>
+                                        {% if replica.status == 'STORED' %}
+                                        <span class="badge bg-success">STORED</span>
+                                        {% elif replica.status == 'CORROMPIDO' %}
+                                        <span class="badge bg-danger">CORROMPIDO</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{{ replica.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="small text-muted">{{ replica.replicated_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('preview_file', file_id=arquivo.id) }}" class="btn btn-outline-secondary" title="Pré-visualizar" target="_blank">
+                                                <i class="fa-solid fa-eye"></i>
+                                            </a>
+                                            <a href="{{ url_for('download_file', file_id=arquivo.id) }}" class="btn btn-outline-secondary" title="Baixar">
+                                                <i class="fa-solid fa-download"></i>
+                                            </a>
+                                            <form action="{{ url_for('delete_node_file', node_id=node.id, file_id=arquivo.id) }}" method="POST" class="d-inline"
+                                                  onsubmit="return confirm('Apagar a réplica de \'{{ arquivo.display_name }}\' neste nó? O ficheiro continua disponível se existir réplica noutro nó.');">
+                                                <button type="submit" class="btn btn-outline-danger" title="Apagar réplica neste nó">
+                                                    <i class="fa-solid fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>
